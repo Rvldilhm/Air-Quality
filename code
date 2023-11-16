@@ -1,0 +1,89 @@
+#define BLYNK_TEMPLATE_ID "TMPL64kx7BMnh"
+#define BLYNK_TEMPLATE_NAME "relay"
+#define BLYNK_AUTH_TOKEN "M2laaUXwKszwPezQeVTfHx8VyNrFnRGk"
+
+#include <WiFi.h>
+#include <BlynkSimpleEsp32.h>
+
+// Define pin for MQ-2 sensor digital output (adjust accordingly)
+#define mq2DigitalPin 2
+
+// Define pins for LEDs
+#define ledGoodQuality 4  // Adjust pin numbers based on your setup
+#define ledBadQuality 5
+
+// Adjust this threshold value based on your requirements for hydrogen
+#define GAS_THRESHOLD_BAD 500
+
+// Define the threshold value for smoke detection
+#define SMOKE_THRESHOLD 200  // Adjust this threshold based on your application
+
+char ssid[] = "OTOMASI";   // Replace with your WiFi SSID
+char pass[] = "@polije.ac.id"; // Replace with your WiFi password
+
+void setup() {
+  Serial.begin(115200);
+  Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass);
+
+  // Set pin as INPUT or OUTPUT
+  pinMode(mq2DigitalPin, INPUT);
+  pinMode(ledGoodQuality, OUTPUT);
+  pinMode(ledBadQuality, OUTPUT);
+
+  // Initialize Blynk charts
+  Blynk.virtualWrite(V2, "CLEARDATA");
+  Blynk.virtualWrite(V5, "CLEARDATA");
+  Blynk.virtualWrite(V1, "CLEARDATA");
+  Blynk.virtualWrite(V4, "CLEARDATA");
+}
+
+void loop() {
+  Blynk.run();
+
+  // Read MQ-2 sensor data for hydrogen
+  int digitalValue = digitalRead(mq2DigitalPin);
+
+  // Print values to Serial Monitor for hydrogen
+  Serial.print("Hydrogen Value: ");
+  Serial.println(digitalValue);
+
+  // Display values in the app for hydrogen
+  Blynk.virtualWrite(V2, digitalValue);
+
+  // Add values to Blynk chart for hydrogen
+  Blynk.virtualWrite(V5, "DATA", millis(), digitalValue);
+
+  // Check gas levels and control LED for hydrogen
+  if (digitalValue == HIGH) {
+    digitalWrite(ledBadQuality, HIGH);
+  } else {
+    digitalWrite(ledBadQuality, LOW);
+  }
+
+  // Read analog value from smoke sensor (changed from A0 to A4)
+  int smokeValue = analogRead(A4);
+
+  // Print values to Serial Monitor for smoke
+  Serial.print("Smoke Value: ");
+  Serial.println(smokeValue);
+
+  // Display values in the app for smoke
+  Blynk.virtualWrite(V1, smokeValue);
+
+  // Add values to Blynk chart for smoke
+  Blynk.virtualWrite(V4, "DATA", millis(), smokeValue);
+
+  // Check smoke levels and control LED for smoke
+  if (smokeValue > SMOKE_THRESHOLD) {
+    digitalWrite(ledBadQuality, HIGH);
+  } else {
+    digitalWrite(ledBadQuality, LOW);
+  }
+
+  delay(1000);  // Adjust the delay based on your application's needs
+}
+
+BLYNK_CONNECTED() {
+  // Your existing code for BLYNK_CONNECTED
+  // ...
+}
