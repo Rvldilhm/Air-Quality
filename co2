@@ -1,0 +1,61 @@
+#define BLYNK_TEMPLATE_ID "TMPL64kx7BMnh"
+#define BLYNK_TEMPLATE_NAME "relay"
+#define BLYNK_AUTH_TOKEN "M2laaUXwKszwPezQeVTfHx8VyNrFnRGk"
+
+#include <WiFi.h>
+#include <BlynkSimpleEsp32.h>
+
+const int MQ135pin = 34;  // Define the pin for MQ135 sensor
+const int ledBadQuality = 5;
+const int SMOKE_THRESHOLD = 200;  // Adjust this threshold based on your application
+char ssid[] = "Minta izin dulu";   // Replace with your WiFi SSID
+char pass[] = "rivaldiilham"; // Replace with your WiFi password
+
+void setup() {
+  Serial.begin(115200);
+  Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass);
+
+  // Initialize Blynk chart
+  Blynk.virtualWrite(V1, "CLEARDATA");
+  Blynk.virtualWrite(V4, "CLEARDATA");
+}
+
+void loop() {
+  Blynk.run();
+
+  int rawValue = analogRead(MQ135pin);
+  float voltage = rawValue / 1024.0 * 5.0;
+  float resistance = (5.0 - voltage) / voltage;
+  float ppm = 1.0 / (0.03588 * pow(resistance, 1.336));
+
+  // Debugging: Print values to Serial Monitor
+  Serial.print("Raw Analog Value: ");
+  Serial.println(rawValue);
+  Serial.print("Voltage: ");
+  Serial.println(voltage, 2);  // Print with 2 decimal places
+  Serial.print("Sensor Resistance: ");
+  Serial.println(resistance, 2);  // Print with 2 decimal places
+  Serial.print("CO2 PPM: ");
+  Serial.println(ppm, 2);  // Print with 2 decimal places
+
+  // Display CO2 value in the Blynk app
+  Blynk.virtualWrite(V1, ppm);
+  Blynk.virtualWrite(V5, ppm);
+
+  // Add CO2 value to Blynk chart
+  Blynk.virtualWrite(V4, "DATA", millis(), ppm);
+
+  // Check CO2 levels and control LED
+  if (ppm > SMOKE_THRESHOLD) {
+    digitalWrite(ledBadQuality, HIGH);
+  } else {
+    digitalWrite(ledBadQuality, LOW);
+  }
+
+  delay(5000);  // Adjust the delay based on your application's needs
+}
+
+BLYNK_CONNECTED() {
+  // Your existing code for BLYNK_CONNECTED
+  // ...
+}
