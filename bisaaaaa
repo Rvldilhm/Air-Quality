@@ -1,0 +1,63 @@
+#define BLYNK_TEMPLATE_ID "TMPL64kx7BMnh"
+#define BLYNK_TEMPLATE_NAME "relay"
+#define BLYNK_AUTH_TOKEN "M2laaUXwKszwPezQeVTfHx8VyNrFnRGk"
+
+#include <WiFi.h>
+#include <BlynkSimpleEsp32.h>
+
+// Define pin for smoke sensor analog output (adjust accordingly)
+const int smokeAnalogPin = A4;
+
+// Define pins for LEDs
+const int ledBadQuality = 5;
+
+// Adjust this threshold value based on your requirements for smoke
+const int SMOKE_THRESHOLD = 200;  // Adjust this threshold based on your application
+
+char ssid[] = "Minta izin dulu";   // Replace with your WiFi SSID
+char pass[] = "rivaldiilham"; // Replace with your WiFi password
+
+void setup() {
+  Serial.begin(115200);
+  Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass);
+
+  // Set pin mode for smoke sensor
+  pinMode(smokeAnalogPin, INPUT);
+
+  // Initialize Blynk chart
+  Blynk.virtualWrite(V1, "CLEARDATA");
+  Blynk.virtualWrite(V4, "CLEARDATA");
+}
+
+void loop() {
+  Blynk.run();
+
+  
+  // Read analog value from smoke sensor
+  int smokeValue = analogRead(smokeAnalogPin);
+
+  // Print smoke value to Serial Monitor
+  Serial.print("CO2 Value: ");
+  Serial.println(smokeValue);
+
+  // Display smoke value in the Blynk app
+  Blynk.virtualWrite(V1, smokeValue);
+  Blynk.virtualWrite(V5, smokeValue);
+
+  // Add smoke value to Blynk chart
+  Blynk.virtualWrite(V4, "DATA", millis(), smokeValue);
+
+  // Check smoke levels and control LED
+  if (smokeValue > SMOKE_THRESHOLD) {
+    digitalWrite(ledBadQuality, HIGH);
+  } else {
+    digitalWrite(ledBadQuality, LOW);
+  }
+
+  delay(1000);  // Adjust the delay based on your application's needs
+}
+
+BLYNK_CONNECTED() {
+  // Your existing code for BLYNK_CONNECTED
+  // ...
+}
