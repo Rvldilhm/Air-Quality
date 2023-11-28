@@ -1,0 +1,88 @@
+/*
+ * Contoh kode untuk memantau tingkat gas dan asap menggunakan sensor MQ-2 dan analog.
+ *
+ * Kode ini menggunakan library Blynk untuk menampilkan data sensor di aplikasi Blynk.
+ */
+
+#include <WiFi.h>
+#include <BlynkSimpleEsp32.h>
+
+
+
+// Definisikan konstanta
+const int BLYNK_TEMPLATE_ID = "TMPL64kx7BMnh";
+const int BLYNK_TEMPLATE_NAME = "relay";
+const int BLYNK_AUTH_TOKEN = "M2laaUXwKszwPezQeVTfHx8VyNrFnRGk";
+
+// Definisikan pin untuk sensor
+const int mq2DigitalPin = 2;
+const int ledGoodQuality = 4;
+const int ledBadQuality = 5;
+const int smokePin = A4;
+
+// Definisikan batas untuk peringatan
+const int HidrogenThresholdWarning = 200;
+const int AsapThresholdWarning = 100;
+
+// Definisikan pin untuk mengendalikan perangkat lain
+const int RelayPin = 6;
+
+// Fungsi untuk membaca nilai dari pin
+template<typename T>
+int readValue(int pin) {
+  if constexpr (std::is_same_v<T, int>) {
+    return digitalRead(pin);
+  } else {
+    return analogRead(pin);
+  }
+}
+
+void setup() {
+  // Inisialisasi serial komunikasi
+  Serial.begin(115200);
+
+  // Sambungkan ke WiFi
+  WiFi.begin("OTOMASI", "@polije.ac.id");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("");
+  Serial.println("WiFi tersambung");
+
+  // Sambungkan ke Blynk
+  Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass);
+
+  // Set pin sebagai input atau output
+  pinMode(mq2DigitalPin, INPUT);
+  pinMode(ledGoodQuality, OUTPUT);
+  pinMode(ledBadQuality, OUTPUT);
+  pinMode(smokePin, INPUT);
+  pinMode(RelayPin, OUTPUT);
+
+
+
+void loop() {
+  // Tampilkan data sensor di Blynk
+  Blynk.virtualWrite(V2, readValue<int>(mq2DigitalPin));
+  Blynk.virtualWrite(V1, readValue<int>(smokePin));
+
+ 
+  // Periksa batas peringatan
+  if (readValue<int>(mq2DigitalPin) > HidrogenThresholdWarning) {
+    Serial.println("Peringatan: Tingkat hidrogen tinggi");
+  }
+  if (readValue<int>(smokePin) > AsapThresholdWarning) {
+    Serial.println("Peringatan: Tingkat asap tinggi");
+  }
+
+  // Kontrol perangkat lain berdasarkan tingkat hidrogen
+  if (readValue<int>(mq2DigitalPin) > HidrogenThresholdBad) {
+    digitalWrite(RelayPin, LOW);
+  } else {
+    digitalWrite(RelayPin, HIGH);
+  }
+
+  // Tunggu 1 detik
+  delay(1000);
+}
