@@ -5,82 +5,97 @@
 #include <WiFi.h>
 #include <BlynkSimpleEsp32.h>
 
-// Define pin for MQ-2 sensor digital output (adjust accordingly)
-#define mq2DigitalPin 2
 
-// Define pins for LEDs
-#define ledGoodQuality 4  // Adjust pin numbers based on your setup
-#define ledBadQuality 5
+const int MQ135pin = 34; // Define the pin for MQ135 sensor
+const int ledBadQuality = 10;
+const int SMOKE_THRESHOLD = 4; // Adjust this threshold based on your application
+char ssid[] = "Minta izin dulu"; // Replace with your WiFi SSID
+char pass[] = "rivaldiilham"; // Replace with your WiFi password
 
-// Adjust this threshold value based on your requirements for hydrogen
-#define GAS_THRESHOLD_BAD 500
+unsigned long previousMillis = 0;  // will store last time MQ135 was read
+const long interval = 60000;        // interval at which to read MQ135 (milliseconds)
 
-// Define the threshold value for smoke detection
-#define SMOKE_THRESHOLD 200  // Adjust this threshold based on your application
-
-char ssid[] = "OTOMASI";   // Replace with your WiFi SSID
-char pass[] = "@polije.ac.id"; // Replace with your WiFi password
+unsigned long startMillis = 0;  // To store the start time
+unsigned long activeTime = 0;  // To store the active time
 
 void setup() {
   Serial.begin(115200);
   Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass);
 
-  // Set pin as INPUT or OUTPUT
-  pinMode(mq2DigitalPin, INPUT);
-  pinMode(ledGoodQuality, OUTPUT);
-  pinMode(ledBadQuality, OUTPUT);
-
-  // Initialize Blynk charts
-  Blynk.virtualWrite(V2, "CLEARDATA");
-  Blynk.virtualWrite(V5, "CLEARDATA");
+  // Initialize Blynk chart
   Blynk.virtualWrite(V1, "CLEARDATA");
   Blynk.virtualWrite(V4, "CLEARDATA");
+
+  startMillis = millis();  // Record the start time
 }
 
 void loop() {
   Blynk.run();
 
-  // Read MQ-2 sensor data for hydrogen
-  int digitalValue = digitalRead(mq2DigitalPin);
+  unsigned long currentMillis = millis();
 
-  // Print values to Serial Monitor for hydrogen
-  Serial.print("Hydrogen Value: ");
-  Serial.println(digitalValue);
+  // Check if it's time to read MQ135
+  if (currentMillis - previousMillis >= interval) {
+    // Save the last time MQ135 was read
+    previousMillis = currentMillis;
 
-  // Display values in the app for hydrogen
-  Blynk.virtualWrite(V2, digitalValue);
+    // MQ135 reading and Blynk update code
+    int rawValue = analogRead(MQ135pin);
+    float voltage = rawValue / 1024.0 * 5.0;
+    float resistance = (5.0 - voltage) / voltage;
 
-  // Add values to Blynk chart for hydrogen
-  Blynk.virtualWrite(V5, "DATA", millis(), digitalValue);
+    // Calculate CO2, CO, and other gases
+    float ppm = 1.0 / (0.03588 * pow(resistance, 1.336));
+    float co = ppm / 2.2; // Approximate conversion from PPM to CO
+    float methane = ppm / 2.7; // Approximate conversion from PPM to CH4
+    float ammonia = ppm / 3.6; // Approximate conversion from PPM to NH3
 
-  // Check gas levels and control LED for hydrogen
-  if (digitalValue == HIGH) {
-    digitalWrite(ledBadQuality, HIGH);
-  } else {
-    digitalWrite(ledBadQuality, LOW);
+    // Debugging: Print values to Serial Monitor
+    Serial.print("Raw Analog Value: ");
+    Serial.println(rawValue);
+    Serial.print("Voltage: ");
+    Serial.println(voltage, 2); // Print with 2 decimal places
+    Serial.print("Sensor Resistance: ");
+    Serial.println(resistance, 2); // Print with 2 decimal places
+    Serial.print("CO2 PPM: ");
+    Serial.println(ppm, 2); // Print with 2 decimal places
+    Serial.print("CO: ");
+    Serial.println(co, 2); // Print with 2 decimal places
+    Serial.print("Methane (CH4) PPM: ");
+    Serial.println(methane, 2); // Print with 2 decimal places
+    Serial.print("Ammonia (NH3) PPM: ");
+    Serial.println(ammonia, 2); // Print with 2 decimal places
+
+    // Display CO2, CO, and other gases on Blynk app
+    Blynk.virtualWrite(V1, ppm);
+    Blynk.virtualWrite(V5, co);
+    Blynk.virtualWrite(V6, methane);
+    Blynk.virtualWrite(V7, ammonia);
+    Blynk.virtualWrite(V9, ppm);
+
+    // Add CO2 value to Blynk chart
+
+    // Check CO2 levels and control LED
+    if (co > SMOKE_THRESHOLD) {
+      Blynk.virtualWrite(V10, 1);
+      digitalWrite(ledBadQuality, HIGH);
+    } else {
+      Blynk.virtualWrite(V10, 0);
+      digitalWrite(ledBadQuality, LOW);
+    }
   }
 
-  // Read analog value from smoke sensor (changed from A0 to A4)
-  int smokeValue = analogRead(A4);
+  // Update active time
+  activeTime = (currentMillis - startMillis) / 1000;  // Convert milliseconds to seconds
 
-  // Print values to Serial Monitor for smoke
-  Serial.print("Smoke Value: ");
-  Serial.println(smokeValue);
+  // Display active time on Blynk
+  Blynk.virtualWrite(V3, activeTime);
 
-  // Display values in the app for smoke
-  Blynk.virtualWrite(V1, smokeValue);
+  // Other non-blocking tasks can be added here
+  // ...
 
-  // Add values to Blynk chart for smoke
-  Blynk.virtualWrite(V4, "DATA", millis(), smokeValue);
-
-  // Check smoke levels and control LED for smoke
-  if (smokeValue > SMOKE_THRESHOLD) {
-    digitalWrite(ledBadQuality, HIGH);
-  } else {
-    digitalWrite(ledBadQuality, LOW);
-  }
-
-  delay(1000);  // Adjust the delay based on your application's needs
+  // Adjust the delay based on your application needs
+  delay(10);
 }
 
 BLYNK_CONNECTED() {
