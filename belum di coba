@@ -5,70 +5,73 @@
 #include <WiFi.h>
 #include <BlynkSimpleEsp32.h>
 
+const int MQ135pin = 34;        // Define the pin for MQ135 sensor
+const int ledBadQuality = 4;
+const int SMOKE_THRESHOLD = 10; // Adjust this threshold based on your application
+char ssid[] = "Minta izin dulu"; // Replace with your WiFi SSID
+char pass[] = "rivaldiilham";    // Replace with your WiFi password
 
-
-const int MQ135pin = 34;
-const int ledBadQuality = 10;
-const int SMOKE_THRESHOLD = 4;
-char ssid[] = "Minta izin dulu";
-char pass[] = "rivaldiilham";
-
-unsigned long previousMillis = 0;
-const long interval = 5;
-unsigned long startMillis = 0;
-unsigned long activeTime = 0;
-
-bool isBlynkActive = false;
-bool isSerialPrintActive = true;
+bool isRunning = false; // Flag to track if the system is running
+unsigned long startTime; // Variable to store the system start time
 
 void setup() {
   Serial.begin(115200);
   Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass);
 
+  // Initialize Blynk chart
   Blynk.virtualWrite(V1, "CLEARDATA");
-  Blynk.virtualWrite(V4, "CLEARDATA");
+  Blynk.virtualWrite(V6, "CLEARDATA");
+  Blynk.virtualWrite(V7, "CLEARDATA");
+  Blynk.virtualWrite(V9, "CLEARDATA");
+  Blynk.virtualWrite(V5, "CLEARDATA");
+  Blynk.virtualWrite(V3, "CLEARDATA");
 }
 
 void loop() {
   Blynk.run();
 
-  unsigned long currentMillis = millis();
-
-  if (isBlynkActive && currentMillis - previousMillis >= interval) {
-    previousMillis = currentMillis;
+  if (isRunning) {
+    unsigned long currentTime = millis() - startTime;
 
     int rawValue = analogRead(MQ135pin);
     float voltage = rawValue / 1024.0 * 5.0;
     float resistance = (5.0 - voltage) / voltage;
 
+    // Calculate CO2, CO, and other gases
     float ppm = 1.0 / (0.03588 * pow(resistance, 1.336));
-    float co = ppm / 2.2;
-    float methane = ppm / 2.7;
-    float ammonia = ppm / 3.6;
+    float co = ppm / 2.2;        // Approximate conversion from PPM to CO
+    float methane = ppm / 2.7;    // Approximate conversion from PPM to CH4
+    float ammonia = ppm / 3.6;    // Approximate conversion from PPM to NH3
 
-    if (isSerialPrintActive) {
-      Serial.print("Raw Analog Value: ");
-      Serial.println(rawValue);
-      Serial.print("Voltage: ");
-      Serial.println(voltage, 2);
-      Serial.print("Sensor Resistance: ");
-      Serial.println(resistance, 2);
-      Serial.print("CO2 PPM: ");
-      Serial.println(ppm, 2);
-      Serial.print("CO: ");
-      Serial.println(co, 2);
-      Serial.print("Methane (CH4) PPM: ");
-      Serial.println(methane, 2);
-      Serial.print("Ammonia (NH3) PPM: ");
-      Serial.println(ammonia, 2);
-    }
+    // Debugging: Print values to Serial Monitor with timestamp
+    Serial.print("Time: ");
+    Serial.println(currentTime);
+    Serial.print(" - Raw Analog Value: ");
+    Serial.println(rawValue);
+    Serial.print(" - Voltage: ");
+    Serial.println(voltage, 2);    // Print with 2 decimal places
+    Serial.print(" - Sensor Resistance: ");
+    Serial.println(resistance, 2); // Print with 2 decimal places
+    Serial.print(" - CO2 PPM: ");
+    Serial.println(ppm, 2);        // Print with 2 decimal places
+    Serial.print(" - CO: ");
+    Serial.println(co, 2);         // Print with 2 decimal places
+    Serial.print(" - Methane (CH4) PPM: ");
+    Serial.println(methane, 2);    // Print with 2 decimal places
+    Serial.print(" - Ammonia (NH3) PPM: ");
+    Serial.println(ammonia, 2);    // Print with 2 decimal places
 
+    // Display CO2, CO, and other gases on Blynk app
     Blynk.virtualWrite(V1, ppm);
     Blynk.virtualWrite(V5, co);
     Blynk.virtualWrite(V6, methane);
     Blynk.virtualWrite(V7, ammonia);
     Blynk.virtualWrite(V9, ppm);
+    Blynk.virtualWrite(V3, currentTime); // Display time on Blynk V3
 
+    // Add CO2 value to Blynk chart
+
+    // Check CO2 levels and control LED
     if (co > SMOKE_THRESHOLD) {
       Blynk.virtualWrite(V10, 1);
       digitalWrite(ledBadQuality, HIGH);
@@ -76,16 +79,9 @@ void loop() {
       Blynk.virtualWrite(V10, 0);
       digitalWrite(ledBadQuality, LOW);
     }
+
+    delay(500); // Adjust the delay based on your application needs
   }
-
-  activeTime = (currentMillis - startMillis) / 1000;
-
-  if (isBlynkActive) {
-    Blynk.virtualWrite(V3, activeTime);
-    Blynk.virtualWrite(V11, "Timestamp: " + String(Time.format("%H:%M:%S")));
-  }
-
-  delay(5);
 }
 
 BLYNK_CONNECTED() {
@@ -94,14 +90,19 @@ BLYNK_CONNECTED() {
 }
 
 BLYNK_WRITE(V0) {
-  isBlynkActive = param.asInt();  // Mengaktifkan atau menonaktifkan Blynk berdasarkan nilai tombol
-  if (isBlynkActive) {
-    startMillis = millis();  // Reset timestamp saat V0 aktif
-    Blynk.virtualWrite(V8, "System has been active for: " + String(activeTime) + "s");
+  int startStopButton = param.asInt();
+  if (startStopButton == 1 && !isRunning) { // Button is pressed (Start) and system is not already running
+    isRunning = true;
+    startTime = millis(); // Store the system start time
+  } else if (startStopButton == 0 && isRunning) { // Button is not pressed (Stop) and system is running
+    isRunning = false;
+    // Reset values or perform any other stop-related actions
+    Blynk.virtualWrite(V1, 0); // Reset CO2 value
+    Blynk.virtualWrite(V5, 0); // Reset CO value
+    Blynk.virtualWrite(V6, 0); // Reset Methane value
+    Blynk.virtualWrite(V7, 0); // Reset Ammonia value
+    Blynk.virtualWrite(V9, 0); // Reset another V9 value (adjust as needed)
+    Blynk.virtualWrite(V10, 0); // 
+    Blynk.virtualWrite(V3, 0);
   }
-}
-
-BLYNK_WRITE(V2) {
-  // Your existing code for BLYNK_WRITE(V2)
-  // ...
 }
