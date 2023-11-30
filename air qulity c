@@ -1,88 +1,94 @@
-/*
- * Contoh kode untuk memantau tingkat gas dan asap menggunakan sensor MQ-2 dan analog.
- *
- * Kode ini menggunakan library Blynk untuk menampilkan data sensor di aplikasi Blynk.
- */
+#define BLYNK_TEMPLATE_ID "TMPL64kx7BMnh"
+#define BLYNK_TEMPLATE_NAME "relay"
+#define BLYNK_AUTH_TOKEN "M2laaUXwKszwPezQeVTfHx8VyNrFnRGk"
 
 #include <WiFi.h>
 #include <BlynkSimpleEsp32.h>
 
-
-
-// Definisikan konstanta
-const int BLYNK_TEMPLATE_ID = "TMPL64kx7BMnh";
-const int BLYNK_TEMPLATE_NAME = "relay";
-const int BLYNK_AUTH_TOKEN = "M2laaUXwKszwPezQeVTfHx8VyNrFnRGk";
-
-// Definisikan pin untuk sensor
-const int mq2DigitalPin = 2;
-const int ledGoodQuality = 4;
-const int ledBadQuality = 5;
-const int smokePin = A4;
-
-// Definisikan batas untuk peringatan
-const int HidrogenThresholdWarning = 200;
-const int AsapThresholdWarning = 100;
-
-// Definisikan pin untuk mengendalikan perangkat lain
-const int RelayPin = 6;
-
-// Fungsi untuk membaca nilai dari pin
-template<typename T>
-int readValue(int pin) {
-  if constexpr (std::is_same_v<T, int>) {
-    return digitalRead(pin);
-  } else {
-    return analogRead(pin);
-  }
-}
+bool Kondisi;
+const int MQ135pin = 34; // Define the pin for MQ135 sensor
+const int ledBadQuality = 4;
+const int SMOKE_THRESHOLD = 10; // Adjust this threshold based on your application
+char ssid[] = "Minta izin dulu"; // Replace with your WiFi SSID
+char pass[] = "rivaldiilham"; // Replace with your WiFi password
 
 void setup() {
-  // Inisialisasi serial komunikasi
   Serial.begin(115200);
-
-  // Sambungkan ke WiFi
-  WiFi.begin("OTOMASI", "@polije.ac.id");
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
-  Serial.println("");
-  Serial.println("WiFi tersambung");
-
-  // Sambungkan ke Blynk
   Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass);
 
-  // Set pin sebagai input atau output
-  pinMode(mq2DigitalPin, INPUT);
-  pinMode(ledGoodQuality, OUTPUT);
-  pinMode(ledBadQuality, OUTPUT);
-  pinMode(smokePin, INPUT);
-  pinMode(RelayPin, OUTPUT);
-
-
+  // Initialize Blynk chart
+  Blynk.virtualWrite(V1, "CLEARDATA");
+  Blynk.virtualWrite(V4, "CLEARDATA");
+}
 
 void loop() {
-  // Tampilkan data sensor di Blynk
-  Blynk.virtualWrite(V2, readValue<int>(mq2DigitalPin));
-  Blynk.virtualWrite(V1, readValue<int>(smokePin));
+  Blynk.run();
 
- 
-  // Periksa batas peringatan
-  if (readValue<int>(mq2DigitalPin) > HidrogenThresholdWarning) {
-    Serial.println("Peringatan: Tingkat hidrogen tinggi");
-  }
-  if (readValue<int>(smokePin) > AsapThresholdWarning) {
-    Serial.println("Peringatan: Tingkat asap tinggi");
+  int rawValue = analogRead(MQ135pin);
+  float voltage = rawValue / 1024.0 * 5.0;
+  float resistance = (5.0 - voltage) / voltage;
+
+  // Calculate CO2, CO, and other gases
+  float ppm = 1.0 / (0.03588 * pow(resistance, 1.336));
+  float co = ppm / 2.2; // Approximate conversion from PPM to CO
+  float methane = ppm / 2.7; // Approximate conversion from PPM to CH4
+  float ammonia = ppm / 3.6; // Approximate conversion from PPM to NH3
+
+  // Debugging: Print values to Serial Monitor
+  Serial.print("Raw Analog Value: ");
+  Serial.println(rawValue);
+  Serial.print("Voltage: ");
+  Serial.println(voltage, 2); // Print with 2 decimal places
+  Serial.print("Sensor Resistance: ");
+  Serial.println(resistance, 2); // Print with 2 decimal places
+  Serial.print("CO2 PPM: ");
+  Serial.println(ppm, 2); // Print with 2 decimal places
+  Serial.print("CO: ");
+  Serial.println(co, 2); // Print with 2 decimal places
+  Serial.print("Methane (CH4) PPM: ");
+  Serial.println(methane, 2); // Print with 2 decimal places
+  Serial.print("Ammonia (NH3) PPM: ");
+  Serial.println(ammonia, 2); // Print with 2 decimal places
+
+  // Display CO2, CO, and other gases on the Blynk app
+  /*Blynk.virtualWrite(V1, ppm);
+  Blynk.virtualWrite(V5, co);
+  Blynk.virtualWrite(V6, methane);
+  Blynk.virtualWrite(V7, ammonia);
+  Blynk.virtualWrite(V9, ppm);*/
+
+  BLYNK_WRITE(V0) {
+    int value = param.asInt();
+    // Set incoming value from pin V0 to a variable int value = param.asInt();
+    // Update state
+    Blynk.virtualWrite(V1, ppm);
+    Blynk.virtualWrite(V5, co);
+    Blynk.virtualWrite(V6, methane);
+    Blynk.virtualWrite(V7, ammonia);
+    Blynk.virtualWrite(V9, ppm);
+
+    if (value == 0) {
+      Kondisi = 0; // relay = 0;
+    } else {
+      Kondisi = 1;
+    }
   }
 
-  // Kontrol perangkat lain berdasarkan tingkat hidrogen
-  if (readValue<int>(mq2DigitalPin) > HidrogenThresholdBad) {
-    digitalWrite(RelayPin, LOW);
+  // Add CO2 value to Blynk chart
+
+  // Check CO2 levels and control LED
+  if (co > SMOKE_THRESHOLD) {
+    Blynk.virtualWrite(V10, 1);
+    digitalWrite(ledBadQuality, HIGH);
   } else {
-    digitalWrite(RelayPin, HIGH);
+    Blynk.virtualWrite(V10, 0);
+    digitalWrite(ledBadQuality, LOW);
   }
 
-  // Tunggu 1 detik
-  delay(1000);
+  delay(500); // Adjust the delay based on your application needs
+}
+
+BLYNK_CONNECTED() {
+  // Your existing code for BLYNK_CONNECTED
+  // ...
 }
